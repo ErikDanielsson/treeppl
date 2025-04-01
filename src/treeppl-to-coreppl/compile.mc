@@ -181,8 +181,8 @@ lang TreePPLCompile
 
   | NothingTypeTppl x -> tyunit_
 
-  sem compileModelInvocation : TpplCompileContext -> Loader -> DeclTppl -> Option (Loader, Expr)
-  sem compileModelInvocation context loader =
+  sem compileModelInvocation : TpplCompileContext -> (Type -> Loader -> (Loader, InferMethod)) -> Loader -> DeclTppl -> Option (Loader, Expr)
+  sem compileModelInvocation context mkInferenceMethod loader =
   | FunDeclTppl (x & {model = Some modelInfo}) ->
     -- TODO(vipa, 2024-12-13): We could technically shadow a model
     -- function, in which case the generated code will refer to the
@@ -218,6 +218,8 @@ lang TreePPLCompile
       } in
     let loader = _addDeclExn loader parsedDecl in
 
+    match mkInferenceMethod outputType loader with (loader, inferenceMethod) in
+
     let invocation =
       -- Either apply to 0 (if nullary model function) or each
       -- parameter in sequence
@@ -230,7 +232,7 @@ lang TreePPLCompile
         (ulam_ ""
           (app_ (nvar_ context.printJsonLn)
             (appf2_ (nvar_ context.serializeResult) outputSer.serializer
-              (infer_ (Default {runs = nvar_ context.particles})
+              (infer_ inferenceMethod
                 (ulam_ "" invocation)))))
         (nvar_ context.sweeps) in
     Some (loader, inferCode)
@@ -963,12 +965,16 @@ lang TreePPLThings = TreePPLAst + TreePPLCompile
   syn FileType =
   | FTreePPL ()
 
+  syn Hook =
+  | TreePPLHook { mkInferenceMethod : Type -> Loader -> (Loader, InferMethod) }
+
   sem _fileType = | _ ++ ".tppl" -> FTreePPL ()
   sem _loadFile path = | (FTreePPL _, loader & Loader x) ->
     -- NOTE(vipa, 2024-12-12): Return if we've already included this
     -- file
     match mapLookup path x.includedFiles with Some symEnv then (symEnv, loader) else
     let loader = Loader {x with includedFiles = mapInsert path _symEnvEmpty x.includedFiles} in
+    match getHookOpt (lam x. match x with TreePPLHook x then Some x else None ()) loader with Some hook in
     -- For things referencing the entirety of the file, and no
     -- particular part of it
     let fileInfo = infoVal path 0 0 0 0 in
@@ -1026,7 +1032,7 @@ lang TreePPLThings = TreePPLAst + TreePPLCompile
 
     -- 3. Model invocations.
     let work = lam loader. lam decl.
-      match compileModelInvocation context loader decl with Some (loader, invocation) then
+      match compileModelInvocation context hook.mkInferenceMethod loader decl with Some (loader, invocation) then
         let decl = DeclLet
           { body = invocation
           , ident = nameSym ""
@@ -1066,7 +1072,7 @@ lang TreePPLThings = TreePPLAst + TreePPLCompile
 end
 
 
-let compileTpplToExecutable = lam filename: String. lam options: Options.
+let compileTpplToExecutable = lam filename: String. lam options: Options. lam mkInferenceMethod.
   use TreePPLThings in
   let log = mkPhaseLogState options.debugDumpPhases options.debugPhases in
   let loader = mkLoader symEnvDefault typcheckEnvDefault [StripUtestHook ()] in
@@ -1075,6 +1081,7 @@ let compileTpplToExecutable = lam filename: String. lam options: Options.
   let loader = enableDesugar loader in
   let loader = enableJsonSerialization loader in
   let loader = registerMatrixFunctions loader in
+  let loader = addHook loader (TreePPLHook {mkInferenceMethod = mkInferenceMethod}) in
   endPhaseStatsExpr log "mk-cppl-loader" unit_;
   let loader = (includeFileExn "." filename loader).1 in
   endPhaseStatsExpr log "include-file" unit_;
