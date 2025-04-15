@@ -258,7 +258,7 @@ lang TreePPLCompile
       let driftKernel =
         match a.driftKernel with Some dk then
           let dk = compileExprTppl context dk in
-          Some (withInfo (infoTm dk) (nulam_ a.randomVar.v dk))
+          Some dk
         else None () in
       let body = TmAssume
         { dist = compileExprTppl context a.dist
