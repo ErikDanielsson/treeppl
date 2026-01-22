@@ -30,7 +30,7 @@ function uniformLogPdf(x: Real, a: Real, b: Real) => Real {
 
 
 /*
- * Node repertoire debt
+ * Node repertoire sampling density
  */ 
 function mtx3ToSeq(mtx: Matrix[Real], i: Int ) => Real[] {
   let p1 = mtxGet(i, 1, mtx); 
@@ -40,7 +40,7 @@ function mtx3ToSeq(mtx: Matrix[Real], i: Int ) => Real[] {
   return [p1 / s, p2 / s, p3 / s];
 }
 
-function getRepertoireDebt(x: Int[], samplingProb: Matrix[Real], nhosts: Int) => Real {
+function getRepertoireSamplingDensity(x: Int[], samplingProb: Matrix[Real], nhosts: Int) => Real {
   // Accumulate the total log probability of sampling this repertoire
   return fold(
     function(acc: Real, i: Int) => Real {

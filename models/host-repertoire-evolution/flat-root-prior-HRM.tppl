@@ -13,11 +13,11 @@ type ReturnType = ReturnType{
 
 
 model function rejectAccept(
-  symbiont_tree: TreeLabeled,
+  symbiontTree: TreeLabeled,
   ntips: Int,
   nhosts: Int,
-  interactions: Int[],
-  host_distances: Real[],
+  interactions: Int[][],
+  hostDistances: Real[][],
   dMean: Real
 ) => ReturnType {
   assume lambda ~ Dirichlet([1., 1., 1., 1.]) drift rbLambdaMove(lambda);
@@ -30,37 +30,36 @@ model function rejectAccept(
               0.0,                lambda[4], 0.-lambda[4]]
   );
   let qMatrix = mtxSclrMul(mu, r);
-
-
-  let nestedInteractions = nestSeq(interactions, ntips, nhosts);
-  let postorderTree = postorderTraverse(symbiont_tree, qMatrix, nestedInteractions, nhosts);
+  let postorderTree = postorderTraverse(symbiontTree, qMatrix, interactions, nhosts);
 
   // Sample the root. We assume in both the independence and full model
   // that we have a flat prior on the root
   let rootPrior = mtxCreate(nhosts, 3, ones(3 * nhosts));
   let rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
-  let initRootRep = suggestRepAligned(rootSamplingProb, 1, nhosts);
-  let rootRep = suggestRepRS(rootSamplingProb, nhosts, initRootRep, 0);
+  let rootRep = suggestRepAligned(rootSamplingProb, 1, nhosts);
+  if !any(is2, rootRep) {
+    weight 0.0;
+  }
 
-  // Calculate the debt and excess
-  let rootLogDebt = getRepertoireDebt(rootRep, rootSamplingProb, nhosts);
-  let rootLogExcess = -log((3.^(Real(nhosts))) - (2.^Real(nhosts)));
+  // Calculate the samplingDensity and modelDensity
+  let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb, nhosts);
+  let rootLogModelDensity = -log((3.^(Real(nhosts))) - (2.^Real(nhosts)));
 
   // This is an aligned point so we can weight by the importance ratio
-  logWeight rootLogExcess - rootLogDebt;
+  logWeight rootLogModelDensity - rootLogSamplingDensity;
 
   // Compute messages to pass to pass to the children of the root
   let newMsg = mtxCreate(nhosts, 3, observationMessage(rootRep, 1, nhosts));
   let leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
   let rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
 
+
   // Construct an object containing the rate matrix in a suitable format for sampling 
   // from the embedded Markov chain
-
   let embeddedQMatrix = rateMatrixToEmbeddedMarkovChain(qMatrix);
   let modelParams = ModelParams {
     beta = beta,
-    hostMetric = mtxCreate(nhosts, nhosts, host_distances),
+    hostMetric = nestSeqToMtx(hostDistances),
     embeddedQMatrix = embeddedQMatrix,
     meanDist = dMean
   };
@@ -68,16 +67,18 @@ model function rejectAccept(
   let leftRepertoireTree = sampleTreeHistory(
     postorderTree.left, nhosts, leftMsg, rootRep, rootAge, modelParams, postorderTree.leftKernel
   );
+
   let rightRepertoireTree = sampleTreeHistory(
     postorderTree.right, nhosts, rightMsg, rootRep, rootAge, modelParams, postorderTree.rightKernel
   );
 
   // Construct the root node of the repertoire tree
   let historyTree = HistoryNode {
-    age = symbiont_tree.age, label = symbiont_tree.label,
+    age = symbiontTree.age, label = symbiontTree.label,
     left = leftRepertoireTree, right = rightRepertoireTree,
     repertoire = rootRep, history = []
   };
+
   return ReturnType {
     lambda = lambda,
     mu = mu,
@@ -96,32 +97,6 @@ function suggestRepAligned(msg: Matrix[Real], i: Int, max: Int) => Int[] {
   }
 }
 
-function suggestRepRS(msg: Matrix[Real], max: Int, initialRep: Int[], depth: Int) => Int[] {
-  let _REP_REJECTION_DEPTH = 10;
-  if any(is2, initialRep) {
-    return initialRep;
-  } else {
-    if depth < _REP_REJECTION_DEPTH {
-      let newRep = suggestRepUnaligned(msg, 1, max);
-      return suggestRepRS(msg, max, newRep, depth + 1);
-    } else {
-      // Set weight to zero and return dummy value
-      weight 0.0;
-      return initialRep;
-    }
-  }
-}
-
-function suggestRepUnaligned(msg: Matrix[Real], i: Int, max: Int) => Int[] {
-  if i <= max {
-    let param = mtx3ToSeq(msg, i);
-    assume x ~ Categorical(param); 
-    return paste0([[x], suggestRepUnaligned(msg, i + 1, max)]);
-  } else {
-    return [];
-  }
-}
-
 function sampleTreeHistory(
   tree: MsgTree,
   nhosts: Int,
@@ -131,6 +106,7 @@ function sampleTreeHistory(
   modelParams: ModelParams,
   branchKernel: Matrix[Real]
 ) => HistoryTree {
+
   if tree is MsgLeaf {
     // We are at a leaf, so we don't need to sample the interactions
     let rep = tree.interactions;
@@ -142,16 +118,12 @@ function sampleTreeHistory(
       tree.age,
       nhosts,
       modelParams,
-      branchKernel,
-      0
+      branchKernel
     );
-
-    // We are aligned so we can weight the program here (shouldn't matter for MCMC)
+    
+    // Weight the program by the importance ratio
     if branchSample.success {
-      logWeight branchSample.logExcess - branchSample.logDebt;
-    } else {
-      // We failed to sample a correct branch, set program weight to zero
-      weight 0.0;
+      logWeight branchSample.logModelDensity - branchSample.logSamplingDensity;
     }
 
     return HistoryLeaf {
@@ -162,9 +134,12 @@ function sampleTreeHistory(
     };
   } else {
     let samplingProb = mtxElemMul(tree.outMsg, preorderMsg);
-    let initRep = suggestRepAligned(samplingProb, 1, nhosts);
-    let rep = suggestRepRS(samplingProb, nhosts, initRep, 0);
-    let nodeLogDebt = getRepertoireDebt(rep, samplingProb, nhosts);
+    let rep = suggestRepAligned(samplingProb, 1, nhosts);
+    // Verify that the sampled repertoire is valid
+    if !any(is2, rep) {
+      weight 0.0;
+    }
+    let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb, nhosts);
 
     // Sample the incident branch
     let branchSample = sampleBranch(
@@ -174,16 +149,12 @@ function sampleTreeHistory(
       tree.age,
       nhosts,
       modelParams,
-      branchKernel,
-      0
+      branchKernel
     );
 
-    // We are aligned so we can weight the program here (shouldn't matter for MCMC)
+    // Weight the program by the importance ratio
     if branchSample.success {
-      logWeight branchSample.logExcess - branchSample.logDebt - nodeLogDebt;
-    } else {
-      // We failed to sample a correct branch, set program weight to zero
-      weight 0.0;
+      logWeight branchSample.logModelDensity - branchSample.logSamplingDensity - nodeLogSamplingDensity;
     }
 
     // Since we sampled a repertoire at the node we should propagate this information to the child nodes
@@ -217,64 +188,47 @@ function sampleBranch(
   finalAge: Real,
   nhosts: Int,
   modelParams: ModelParams,
-  branchKernel: Matrix[Real],
-  rejectionDepth: Int
+  branchKernel: Matrix[Real]
 ) => CorrectedBranchSample {
-  let _MAX_REJECTION_DEPTH_BRANCH = 100;
-  if rejectionDepth <= _MAX_REJECTION_DEPTH_BRANCH {
-    // Sample the events per host
-    let unorderedBranch = sampleUnorderedBranch(
-      startRep, finalRep, startAge, finalAge, 1, nhosts, modelParams.embeddedQMatrix, 1
-    );
-    if unorderedBranch.success {
+  // Sample the events per host
+  let unorderedBranch = sampleUnorderedBranch(
+    startRep, finalRep, startAge, finalAge, nhosts, modelParams.embeddedQMatrix
+  );
 
-      // All host histories were sampled correctly,
-      // compile the events for all hosts and sort them
-      let allHostEvents = paste0(unorderedBranch.history);
-      let orderedEvents = qSort(compAge, allHostEvents);
-      let nEvents = length(orderedEvents);
-      if allTimesValidBranch(startRep, orderedEvents, 1, nEvents, nhosts) {
-        // The branch is correct along the full history, 
-        // accept and calculate the true weight of the sample
-        
-        // Calculate the debt -- this is the density of the endpoint conditioned
-        // (parallel) chains at the current sample. 
-        let logDebt = independenceLikelihoodEndCond(
-          startRep, finalRep, startAge, finalAge, unorderedBranch.history, modelParams, branchKernel
-        );
-        // Calculate the likelihood of the path under the full model
-        let logExcess = fullModelWeight(
-          1, startRep, finalRep, startAge, finalAge, orderedEvents, nEvents, nhosts, modelParams
-        );
-        // Return the branch sample with both the debt and the excess
-        return CorrectedBranchSample {
-          history = orderedEvents,
-          logDebt = logDebt,
-          logExcess = logExcess,
-          success = true
-        };
-      }
-    }
-    // Either one of the hosts failed to be sampled correctly
-    // or the history was invalid somewhere along the branch
-    return sampleBranch(
-      startRep,
-      finalRep,
-      startAge,
-      finalAge,
-      nhosts,
-      modelParams,
-      branchKernel,
-      rejectionDepth + 1
+  // All host histories were sampled correctly,
+  // compile the events for all hosts and sort them
+  let allHostEvents = paste0(unorderedBranch);
+  let orderedEvents = qSort(compAge, allHostEvents);
+  let nEvents = length(orderedEvents);
+  if allTimesValidBranch(startRep, orderedEvents, 1, nEvents, nhosts) {
+    // The branch is correct along the full history, 
+    // accept and calculate the true weight of the sample
+    // Calculate the samplingDensity -- this is the density of the endpoint conditioned
+    // (parallel) chains at the current sample. 
+    let logSamplingDensity = independenceLikelihoodEndCond(
+      startRep, finalRep, startAge, finalAge, unorderedBranch, modelParams, branchKernel
     );
-  } else {
-    // We ran out of rejection depth for the branch
+
+    // Calculate the likelihood of the path under the full model
+    let logModelDensity = fullModelWeight(
+      1, startRep, finalRep, startAge, finalAge, orderedEvents, nEvents, nhosts, modelParams
+    );
+    // Return the branch sample with both the samplingDensity and the modelDensity
     return CorrectedBranchSample {
-      history = [],
-      logDebt = -log(0.0),
-      logExcess = log(0.0),
+      history = orderedEvents,
+      logSamplingDensity = logSamplingDensity,
+      logModelDensity = logModelDensity,
+      success = true
+    };
+  } else {
+    // MCMC-INFERENCE: Do rejection sampling if we reach this point
+    weight 0.0;
+    return CorrectedBranchSample {
+      history = orderedEvents,
+      logSamplingDensity = 0.0,
+      logModelDensity = log(0.0),
       success = false
-    };   
+    };
   }
 }
 
@@ -297,43 +251,24 @@ function sampleUnorderedBranch(
   finalRep: Int[],
   startAge: Real,
   finalAge: Real,
-  hostIndex: Int,
   nhosts: Int,
-  embeddedQMatrix: EmbeddedMarkovChainMatrix,
-  rejectionDepth: Int
-) => BranchSample {
-  let _MAX_REJECTION_DEPTH_HOST = 100;
+  embeddedQMatrix: EmbeddedMarkovChainMatrix
+) => Event[][] {
   // Note that startAge > finalAge since the tree is moving forwards in time
-  if hostIndex <= nhosts {
-    let hostHistory = sampleHostHistory(
-      startRep[hostIndex], finalRep[hostIndex], startAge, finalAge, hostIndex, embeddedQMatrix, 1
-    );
-    if hostHistory.success {
-      let otherHostHistories = sampleUnorderedBranch(
-        startRep, finalRep, startAge, finalAge, hostIndex + 1, nhosts, embeddedQMatrix, 0
+  return sapply(
+    1 to nhosts,
+    function(hostIndex : Int) => Event[] {
+      return sampleHostHistory(
+        startRep[hostIndex],
+        finalRep[hostIndex],
+        startAge,
+        finalAge,
+        hostIndex,
+        embeddedQMatrix,
+        1
       );
-      return BranchSample {
-        history = cons(hostHistory.history, otherHostHistories.history),
-        success = otherHostHistories.success
-      };
-    } else {
-      if rejectionDepth <= _MAX_REJECTION_DEPTH_HOST {
-        return sampleUnorderedBranch(
-          startRep, finalRep, startAge, finalAge, hostIndex, nhosts, embeddedQMatrix, rejectionDepth + 1
-        );
-      } else {
-        return BranchSample {
-          history = [],
-          success = false
-        };
-      }
     }
-  } else {
-    return BranchSample {
-      history = [],
-      success = true
-    };
-  }
+  );
 }
 
 
@@ -344,12 +279,11 @@ function sampleHostHistory(
   finalAge: Real,
   host: Int,
   embeddedQMatrix: EmbeddedMarkovChainMatrix,
-  stepIndex: Int
-) => HostBranchSample {
+  stepIndex : Int
+) => Event[] {
   let totalRate = embeddedQMatrix.totalRates[startState + 1];
   if startState != finalState && stepIndex == 1 {
     // If there is a mutation on the interval, sample the first event from a truncated exponential
-
     let t = sampleTruncatedExponential(totalRate, startAge - finalAge);
     let eventTime = startAge - t;
 
@@ -358,30 +292,23 @@ function sampleHostHistory(
     let param = embeddedQMatrix.transitionProbs[startState + 1];
 
     let restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
-    return HostBranchSample {
-      history = cons(
-        Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
-        restOfHistory.history
-      ),
-      success = restOfHistory.success
-    };
+    return cons(
+      Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
+      restOfHistory
+    );
 
   } else {
     // If the final state does not equal the start state, then we don't want to
     // force there to be events in the remaining interval
     assume t ~ Exponential(totalRate);
     if startAge - t < finalAge {
-      // We overshoot so we are finished, and just save the debt
+      // We overshoot so we are finished, and just save the samplingDensity
       if startState == finalState {
-        return HostBranchSample {
-          history = [],
-          success = true
-        };
+          return [];
       } else {
-        return HostBranchSample {
-          history = [],
-          success = false
-        };
+        // MCMC-INFERENCE: Do rejection sampling if we reach this point
+        weight 0.0;
+        return [];
       }
     } else {
 
@@ -393,13 +320,10 @@ function sampleHostHistory(
       // Record the event time
       let eventTime = startAge - t;
       let restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
-      return HostBranchSample {
-        history = cons(
-          Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
-          restOfHistory.history
-        ),
-        success = restOfHistory.success
-      };
+      return cons(
+        Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
+        restOfHistory
+      );
     }
   }
 }
@@ -407,8 +331,8 @@ function sampleHostHistory(
 function sampleTruncatedExponential(rate: Real, maxT: Real) => Real {
   let uMin = exp(-rate * maxT);
   // Assuming directly from the truncated distribution gave numerical errors
-  assume u_ ~ Uniform(0.0, 1.0);
-  let u = uMin + u_ * (1. - uMin);
+  assume u ~ Uniform(0.0, 1.0);
+  let u = uMin + u * (1. - uMin);
   let expSample = -log(u) / rate;
   return expSample;
 }

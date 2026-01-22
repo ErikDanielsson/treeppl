@@ -2,8 +2,8 @@ import "stdlib::math.mc"
 import "helpers.tppl"
 import "container-types.tppl"
 /*
- * This file contains functions for calculating the point wise density (excess)
- * for the full model.
+ * This file contains functions for calculating the point wise density for the
+ * full model -- this is called "modelDensity" in variable names
  */ 
 function fullModelWeight(
   nextIndex: Int,
