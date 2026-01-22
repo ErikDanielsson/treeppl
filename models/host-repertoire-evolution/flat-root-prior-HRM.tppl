@@ -37,9 +37,8 @@ model function rejectAccept(
   let rootPrior = mtxCreate(nhosts, 3, ones(3 * nhosts));
   let rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
   let rootRep = suggestRepAligned(rootSamplingProb, 1, nhosts);
-  if !any(is2, rootRep) {
-    weight 0.0;
-  }
+  
+  weight bool2real(!any(is, rootRep));
 
   // Calculate the samplingDensity and modelDensity
   let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb, nhosts);
@@ -136,9 +135,7 @@ function sampleTreeHistory(
     let samplingProb = mtxElemMul(tree.outMsg, preorderMsg);
     let rep = suggestRepAligned(samplingProb, 1, nhosts);
     // Verify that the sampled repertoire is valid
-    if !any(is2, rep) {
-      weight 0.0;
-    }
+    weight bool2real(!any(is2, rep));
     let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb, nhosts);
 
     // Sample the incident branch
