@@ -12,14 +12,15 @@ type ReturnType = ReturnType{
 }
 
 
-model function rejectAccept(
+model function hostRepertoireModel(
   symbiontTree: TreeLabeled,
-  ntips: Int,
-  nhosts: Int,
   interactions: Int[][],
   hostDistances: Real[][],
   dMean: Real
 ) => ReturnType {
+
+  let nHosts = length(hostDistances);
+
   assume lambda ~ Dirichlet([1., 1., 1., 1.]) drift rbLambdaMove(lambda);
   assume mu ~ Exponential(10.) drift rbMuMove(mu);
   assume beta ~ Exponential(1.) drift rbBetaMove(beta);
@@ -30,25 +31,25 @@ model function rejectAccept(
               0.0,                lambda[4], 0.-lambda[4]]
   );
   let qMatrix = mtxSclrMul(mu, r);
-  let postorderTree = postorderTraverse(symbiontTree, qMatrix, interactions, nhosts);
+  let postorderTree = postorderTraverse(symbiontTree, qMatrix, interactions, nHosts);
 
   // Sample the root. We assume in both the independence and full model
   // that we have a flat prior on the root
-  let rootPrior = mtxCreate(nhosts, 3, ones(3 * nhosts));
+  let rootPrior = mtxCreate(nHosts, 3, ones(3 * nHosts));
   let rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
-  let rootRep = suggestNodeRep(rootSamplingProb, nhosts);
+  let rootRep = suggestNodeRep(rootSamplingProb, nHosts, postorderTree.label);
   
-  weight bool2real(!any(is2, rootRep));
+  weight bool2real(any(is2, rootRep)) + Real(postorderTree.label) * 0.;
 
   // Calculate the samplingDensity and modelDensity
-  let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb, nhosts);
-  let rootLogModelDensity = -log((3.^(Real(nhosts))) - (2.^Real(nhosts)));
+  let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb, nHosts);
+  let rootLogModelDensity = -log((3.^(Real(nHosts))) - (2.^Real(nHosts)));
 
   // This is an aligned point so we can weight by the importance ratio
-  logWeight rootLogModelDensity - rootLogSamplingDensity;
+  logWeight (rootLogModelDensity - rootLogSamplingDensity) * exp(Real(postorderTree.label) * 0.);
 
   // Compute messages to pass to pass to the children of the root
-  let newMsg = mtxCreate(nhosts, 3, observationMessage(rootRep, 1, nhosts));
+  let newMsg = mtxCreate(nHosts, 3, observationMessage(rootRep, 1, nHosts));
   let leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
   let rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
 
@@ -63,11 +64,11 @@ model function rejectAccept(
   };
   let rootAge = postorderTree.age;
   let leftRepertoireTree = sampleTreeHistory(
-    postorderTree.left, nhosts, leftMsg, rootRep, rootAge, modelParams, postorderTree.leftKernel
+    postorderTree.left, nHosts, leftMsg, rootRep, rootAge, modelParams, postorderTree.leftKernel
   );
 
   let rightRepertoireTree = sampleTreeHistory(
-    postorderTree.right, nhosts, rightMsg, rootRep, rootAge, modelParams, postorderTree.rightKernel
+    postorderTree.right, nHosts, rightMsg, rootRep, rootAge, modelParams, postorderTree.rightKernel
   );
 
   // Construct the root node of the repertoire tree
@@ -86,23 +87,29 @@ model function rejectAccept(
 } 
 
 function suggestNodeRep(
-  msg: Matrix[Real], nhosts: Int, nodeLabel: Int
+  msg: Matrix[Real], nHosts: Int, nodeLabel: Int
 ) => Int[] {
-  // We need the nodeLabel in the inference layer to connect the assumes to the 
-  // correct node
+
   return sapply(
-    1 to nhosts,
+    1 to nHosts,
     function(h : Int) => Int {
       let param = mtx3ToSeq(msg, h);
-      assume x ~ Categorical(param) drift categoricalMove(x, param); 
-      return x;
+      return suggestHostNodeRep(h, param, nodeLabel);
     }
   );
 }
 
+function suggestHostNodeRep(h : Int, param : Real[], nodeLabel : Int) => Int {
+  // We need the nodeLabel in the inference layer to connect the assumes to the 
+  // correct node
+  assume x ~ Categorical(param) drift categoricalMove(x, param); 
+  return x;
+}
+
+
 function sampleTreeHistory(
   tree: MsgTree,
-  nhosts: Int,
+  nHosts: Int,
   preorderMsg: Matrix[Real],
   parentRep: Int[],
   parentAge: Real,
@@ -118,15 +125,14 @@ function sampleTreeHistory(
       rep,
       parentAge,
       tree.age,
-      nhosts,
+      nHosts,
+      tree.label,
       modelParams,
       branchKernel
     );
     
     // Weight the program by the importance ratio
-    if branchSample.success {
-      logWeight branchSample.logModelDensity - branchSample.logSamplingDensity;
-    }
+    logWeight (branchSample.logModelDensity - branchSample.logSamplingDensity) * exp(Real(tree.label) * 0.);
 
     return HistoryLeaf {
       age = tree.age,
@@ -136,10 +142,10 @@ function sampleTreeHistory(
     };
   } else {
     let samplingProb = mtxElemMul(tree.outMsg, preorderMsg);
-    let rep = suggestNodeRep(samplingProb, nhosts, tree.label);
+    let rep = suggestNodeRep(samplingProb, nHosts, tree.label);
     // Verify that the sampled repertoire is valid
-    weight bool2real(!any(is2, rep));
-    let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb, nhosts);
+    weight bool2real(any(is2, rep)) + Real(tree.label) * 0.;
+    let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb, nHosts);
 
     // Sample the incident branch
     let branchSample = sampleBranch(
@@ -147,27 +153,26 @@ function sampleTreeHistory(
       rep,
       parentAge,
       tree.age,
-      nhosts,
+      nHosts,
+      tree.label,
       modelParams,
       branchKernel
     );
 
-    // Weight the program by the importance ratio
-    if branchSample.success {
-      logWeight branchSample.logModelDensity - branchSample.logSamplingDensity - nodeLogSamplingDensity;
-    }
+    // Weight the program by the importance ratio -- this will invalidate
+    logWeight branchSample.logModelDensity - branchSample.logSamplingDensity - nodeLogSamplingDensity * exp(Real(tree.label) * 0.);
 
     // Since we sampled a repertoire at the node we should propagate this information to the child nodes
-    let newMsg = mtxCreate(nhosts, 3, observationMessage(rep, 1, nhosts));
+    let newMsg = mtxCreate(nHosts, 3, observationMessage(rep, 1, nHosts));
     let leftMsg = mtxMul(newMsg, tree.leftKernel);
     let rightMsg = mtxMul(newMsg, tree.rightKernel);
 
     // Sample the two subtrees
     let left = sampleTreeHistory(
-      tree.left, nhosts, leftMsg, rep, tree.age, modelParams, tree.leftKernel
+      tree.left, nHosts, leftMsg, rep, tree.age, modelParams, tree.leftKernel
     );
     let right = sampleTreeHistory(
-      tree.right, nhosts, rightMsg, rep, tree.age, modelParams, tree.rightKernel
+      tree.right, nHosts, rightMsg, rep, tree.age, modelParams, tree.rightKernel
     );
 
     return HistoryNode {
@@ -186,13 +191,20 @@ function sampleBranch(
   finalRep: Int[],
   startAge: Real,
   finalAge: Real,
-  nhosts: Int,
+  nHosts: Int,
+  nodeLabel: Int,
   modelParams: ModelParams,
   branchKernel: Matrix[Real]
 ) => CorrectedBranchSample {
   // Sample the events per host
   let unorderedBranch = sampleUnorderedBranch(
-    startRep, finalRep, startAge, finalAge, nhosts, modelParams.embeddedQMatrix
+    startRep,
+    finalRep,
+    startAge,
+    finalAge,
+    nHosts,
+    nodeLabel,
+    modelParams.embeddedQMatrix
   );
 
   // All host histories were sampled correctly,
@@ -200,7 +212,7 @@ function sampleBranch(
   let allHostEvents = paste0(unorderedBranch);
   let orderedEvents = qSort(compAge, allHostEvents);
   let nEvents = length(orderedEvents);
-  if allTimesValidBranch(startRep, orderedEvents, 1, nEvents, nhosts) {
+  if allTimesValidBranch(startRep, orderedEvents, 1, nEvents, nHosts) {
     // The branch is correct along the full history, 
     // accept and calculate the true weight of the sample
     // Calculate the samplingDensity -- this is the density of the endpoint conditioned
@@ -211,7 +223,7 @@ function sampleBranch(
 
     // Calculate the likelihood of the path under the full model
     let logModelDensity = fullModelWeight(
-      1, startRep, finalRep, startAge, finalAge, orderedEvents, nEvents, nhosts, modelParams
+      1, startRep, finalRep, startAge, finalAge, orderedEvents, nEvents, nHosts, modelParams
     );
     // Return the branch sample with both the samplingDensity and the modelDensity
     return CorrectedBranchSample {
@@ -222,10 +234,9 @@ function sampleBranch(
     };
   } else {
     // MCMC-INFERENCE: Do rejection sampling if we reach this point
-    weight 0.0;
     return CorrectedBranchSample {
       history = orderedEvents,
-      logSamplingDensity = 0.0,
+      logSamplingDensity = log(0.0),
       logModelDensity = log(0.0),
       success = false
     };
@@ -251,12 +262,13 @@ function sampleUnorderedBranch(
   finalRep: Int[],
   startAge: Real,
   finalAge: Real,
-  nhosts: Int,
+  nHosts: Int,
+  nodeLabel: Int,
   embeddedQMatrix: EmbeddedMarkovChainMatrix
 ) => Event[][] {
   // Note that startAge > finalAge since the tree is moving forwards in time
   return sapply(
-    1 to nhosts,
+    1 to nHosts,
     function(hostIndex : Int) => Event[] {
       return sampleHostHistory(
         startRep[hostIndex],
@@ -264,12 +276,14 @@ function sampleUnorderedBranch(
         startAge,
         finalAge,
         hostIndex,
-        embeddedQMatrix,
-        1
+        nodeLabel,
+        embeddedQMatrix
       );
     }
   );
 }
+
+type Bridge = Bridge { events : Event[], success : Bool}
 
 function sampleHostHistory(
   startState: Int,
@@ -277,35 +291,70 @@ function sampleHostHistory(
   startAge: Real,
   finalAge: Real,
   host: Int,
-  embeddedQMatrix: EmbeddedMarkovChainMatrix,
-  stepIndex : Int
+  nodeLabel: Int,
+  embeddedQMatrix: EmbeddedMarkovChainMatrix
 ) => Event[] {
+  // Sample the first event time (aligned). Make dependent on the 
   let totalRate = embeddedQMatrix.totalRates[startState + 1];
-  // If the final state does not equal the start state, then we don't want to
-  // force there to be events in the remaining interval
-  assume t ~ Exponential(totalRate);
-  if startAge - t < finalAge {
-    // We overshoot so we are finished, and just save the samplingDensity
-    if startState == finalState {
-        return [];
+  assume t ~ Exponential(totalRate + (Real(host) * 0.) + (Real(nodeLabel) * 0.));
+  let eventTime = startAge - t;
+  let bridge = sampleHostHistoryRec(
+    startState,
+    finalState,
+    eventTime,
+    finalAge,
+    host,
+    nodeLabel,
+    embeddedQMatrix
+  );
+  weight bool2real(bridge.success) + Real(host) * 0. + Real(nodeLabel) * 0.;
+  return bridge.events;
+}
+
+
+function sampleHostHistoryRec(
+  currentState: Int,
+  finalState: Int,
+  currentAge: Real,
+  finalAge: Real,
+  host: Int,
+  nodeLabel: Int,
+  embeddedQMatrix: EmbeddedMarkovChainMatrix
+) => Bridge {
+ if currentAge < finalAge {
+    // We overshoot so we are finished, check if we succeeded
+    if currentState == finalState {
+      // Success!
+        return Bridge { events = [], success = true };
     } else {
-      // MCMC-INFERENCE: Do rejection sampling if we reach this point
-      weight 0.0;
-      return [];
+      // We failed to reach our destination
+      return Bridge { events = [], success = false };
     }
   } else {
-
     // Sample the next transition
-    let nextState = sampleNextEvent(startState, embeddedQMatrix);
-    let param = embeddedQMatrix.transitionProbs[startState + 1];
-    // assume nextState ~ Categorical(param);
+    let param = embeddedQMatrix.transitionProbs[currentState + 1];
+    assume nextState ~ Categorical(param);
+
+    // Sample the next event time
+    let totalRate = embeddedQMatrix.totalRates[nextState + 1];
+    assume t ~ Exponential(totalRate + (Real(host) * 0.) + (Real(nodeLabel) * 0.));
 
     // Record the event time
-    let eventTime = startAge - t;
-    let restOfHistory = sampleHostHistory(nextState, finalState, eventTime, finalAge, host, embeddedQMatrix, stepIndex + 1);
-    return cons(
-      Event { eventTime = eventTime, fromState = startState, toState = nextState, host = host },
-      restOfHistory
+    let restOfHistory = sampleHostHistoryRec(
+      nextState,
+      finalState,
+      currentAge - t,
+      finalAge,
+      host,
+      nodeLabel,
+      embeddedQMatrix
     );
+    return Bridge
+      { events = cons(
+          Event { eventTime = currentAge, fromState = currentState, toState = nextState, host = host },
+          restOfHistory.events
+        )
+      , success = restOfHistory.success
+      };
   }
 }
