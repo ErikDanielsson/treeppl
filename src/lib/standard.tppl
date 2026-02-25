@@ -2,6 +2,7 @@ import "stdlib::ext/dist-ext.mc"
 import "stdlib::seq.mc"
 import "stdlib::string.mc"
 import "stdlib::common.mc"
+import "stdlib::float.mc"
 import "stdlib::ext/arr-ext.mc"
 import "stdlib::ext/mat-ext.mc"
 import "./standard.mc"
@@ -37,6 +38,10 @@ function minInt(a : Int, b : Int) => Int {
 
 function maxInt(a : Int, b : Int) => Int {
   return mathMaxi(a)(b);
+}
+
+function maxReal(a : Real, b : Real) => Real {
+  return maxf(a)(b);
 }
 
 /* -------------------
@@ -231,6 +236,14 @@ function mtxTrans(mtx : Matrix[Real]) => Matrix[Real] {
 
 function mtxExp(mtx : Matrix[Real]) => Matrix[Real] {
   return matExpExn(mtx);
+}
+
+// NOTE(ed: 2026-02-22): The squaring and scaling algorithm can sometimes fail
+// to produce a valid Markov matrix when exponentiating a rate matrix. This
+// removes any remnant negative numbers and normalizes the rows. A more fancy
+// thing would be to use a projection in terms of the Frobenius inner product
+function mtxExpRateSafe(mtx : Matrix[Real]) => Matrix[Real] {
+  return matExpRateSafe(mtx);
 }
 
 function mtxMul(a : Matrix[Real], b : Matrix[Real]) => Matrix[Real] {

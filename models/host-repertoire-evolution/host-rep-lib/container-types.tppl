@@ -42,7 +42,6 @@ type ModelParams = ModelParams {
   beta: Real,
   hostMetric: Matrix[Real],
   embeddedQMatrix: EmbeddedMarkovChainMatrix,
-  meanDist: Real
 }
 
 // Model parameters for CTMC in jump chain form

@@ -16,7 +16,6 @@ model function hostRepertoireModel(
   symbiontTree: TreeLabeled,
   interactions: Int[][],
   hostDistances: Real[][],
-  dMean: Real
 ) => ReturnType {
 
   let nHosts = length(hostDistances);
@@ -35,7 +34,7 @@ model function hostRepertoireModel(
 
   // Sample the root. We assume in both the independence and full model
   // that we have a flat prior on the root
-  let rootPrior = mtxCreate(nHosts, 3, ones(3 * nHosts));
+  let rootPrior = mtxCreate(nHosts, 3, rep(3 * nHosts, 1.));
   let rootSamplingProb = mtxElemMul(postorderTree.outMsg, rootPrior);
   let rootRep = suggestNodeRep(rootSamplingProb, nHosts, postorderTree.label);
   
@@ -58,9 +57,8 @@ model function hostRepertoireModel(
   let embeddedQMatrix = rateMatrixToEmbeddedMarkovChain(qMatrix);
   let modelParams = ModelParams {
     beta = beta,
-    hostMetric = nestSeqToMtx(hostDistances),
+    hostMetric = nestSeqToMtx(normalizeHostMetric(hostDistances)),
     embeddedQMatrix = embeddedQMatrix,
-    meanDist = dMean
   };
   let rootAge = postorderTree.age;
   let leftRepertoireTree = sampleTreeHistory(
@@ -89,23 +87,17 @@ model function hostRepertoireModel(
 function suggestNodeRep(
   msg: Matrix[Real], nHosts: Int, nodeLabel: Int
 ) => Int[] {
-
   return sapply(
     1 to nHosts,
     function(h : Int) => Int {
-      let param = mtx3ToSeq(msg, h);
-      return suggestHostNodeRep(h, param, nodeLabel);
+      // We need the nodeLabel in the inference layer to connect the assumes to the 
+      // correct node
+      let param = mtx3ToSeq(msg, h + nodeLabel * 0);
+      assume x ~ Categorical(param) drift categoricalMove(x, param); 
+      return x;
     }
   );
 }
-
-function suggestHostNodeRep(h : Int, param : Real[], nodeLabel : Int) => Int {
-  // We need the nodeLabel in the inference layer to connect the assumes to the 
-  // correct node
-  assume x ~ Categorical(param) drift categoricalMove(x, param); 
-  return x;
-}
-
 
 function sampleTreeHistory(
   tree: MsgTree,
@@ -283,7 +275,7 @@ function sampleUnorderedBranch(
   );
 }
 
-type Bridge = Bridge { events : Event[], success : Bool}
+type Bridge = Bridge { events : Event[], success : Bool }
 
 function sampleHostHistory(
   startState: Int,
@@ -321,15 +313,9 @@ function sampleHostHistoryRec(
   nodeLabel: Int,
   embeddedQMatrix: EmbeddedMarkovChainMatrix
 ) => Bridge {
- if currentAge < finalAge {
+  if currentAge < finalAge {
     // We overshoot so we are finished, check if we succeeded
-    if currentState == finalState {
-      // Success!
-        return Bridge { events = [], success = true };
-    } else {
-      // We failed to reach our destination
-      return Bridge { events = [], success = false };
-    }
+    return Bridge { events = [], success = (currentState == finalState) };
   } else {
     // Sample the next transition
     let param = embeddedQMatrix.transitionProbs[currentState + 1];
@@ -357,4 +343,8 @@ function sampleHostHistoryRec(
       , success = restOfHistory.success
       };
   }
+}
+
+function is2(x: Int) => Bool {
+  return x == 2;
 }

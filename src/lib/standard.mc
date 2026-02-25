@@ -53,6 +53,23 @@ let matNormalize = lam mtx.
   let mtx = matCopy mtx in
   repeati (lam i. extArrSetExn mtx.arr i (divf (extArrGetExn mtx.arr i) sum)) (muli mtx.m mtx.n);
   mtx
+
+let matMap : all x. (Float -> Float) -> Mat Float -> Mat Float = lam f. lam mtx.
+  let mtx2 = matCopy mtx in
+  repeati (lam i. extArrSetExn mtx2.arr i (f (extArrGetExn mtx.arr i))) (muli mtx.m mtx.n);
+  mtx2
+
+let matNormalizeRows : Mat Float -> Mat Float = lam mtx.
+  -- Create a column vector of sums
+  let sums = extArrToSeq (matMulExn mtx (matFromArrExn mtx.m 1 (extArrOfSeq extArrKindFloat64 (make mtx.m 1.)))).arr in
+  let mtx2 = matCopy mtx in
+  repeati (lam i. repeati (lam j. matSetExn mtx2 i j (divf (matGetExn mtx i j) (get sums i))) mtx.n) mtx.m;
+  mtx2
+
+let matExpRateSafe : Mat Float -> Mat Float = lam mtx.
+  matNormalizeRows (matMap (lam f. if gtf f 0.0 then f else 0.0) (matExpExn mtx))
+  
+
 let matGetRow : all a. Int -> Mat a -> Mat a = lam row. lam mtx.
   let new = matMakeUninit (externalExtArrKind mtx.arr) 1 mtx.n in
   let r = subi row 1 in

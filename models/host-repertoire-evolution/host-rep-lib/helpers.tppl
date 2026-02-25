@@ -1,6 +1,21 @@
 import "container-types.tppl"
 import "lib.tppl"
 
+
+function normalizeHostMetric(hostMetric: Real[][]) => Real[][] {
+  // Divide the metric by the mean distance
+  let summedPairWiseDists = seqSumReal(join(hostMetric));
+  let n = length(hostMetric);
+  let meanDist = summedPairWiseDists / Real(n * (n - 1));
+  return sapply(
+    function(s : Real[]) => Real[] {
+      return sapply(function(e: Real) => Real {
+        return e / meanDist
+      }, s)
+    }, hostMetric
+  );
+}
+
 function rateMatrixToEmbeddedMarkovChain(
   qMatrix: Matrix[Real]
 ) => EmbeddedMarkovChainMatrix {
@@ -20,44 +35,7 @@ function rateMatrixToEmbeddedMarkovChain(
   };
 }
 
-function is2(x: Int) => Bool {
-  return x == 2;
-}
 
-function compAge(left: Event, right: Event) => Int {
-  if (right.eventTime >= left.eventTime) {
-    return 1;
-  } else {
-    return -1;
-  }
-}
-
-function ones(nOnes: Int) => Real[] {
-  if nOnes > 0 {
-    return cons(
-      1., ones(nOnes - 1)
-    );
-  } else {
-    return [];
-  }
-}
-
-function n2s(repertoire: Int[]) => Int {
-  return fold(function (acc: Int, h: Int) => Int {
-      if h == 2 { return acc + 1; } else { return acc; }
-    }, 0, repertoire);
-}
-
-function updateRepertoire(currRep: Int[], event: Event, nhosts: Int) => Int[] {
-  let hostIndex = event.host;
-  return paste0(
-    [
-      slice(currRep, 1, hostIndex),
-      [event.toState],
-      slice(currRep, hostIndex + 1, nhosts + 1)
-    ]
-  );
-}
 
 function sampleNextEvent(
   currState: Int,
