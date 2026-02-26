@@ -112,22 +112,26 @@ function getGainRate (
   let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
   // We need to add the phylogenetic influence to the rate
   // since we have a gain event
-  let pred = getCurrentHostsPred(fromState);
-  let currentHosts = whichTrue(sapply(repertoire, pred));
-  let dist = mtxMean(mtxRowCols(
-    modelParams.hostMetric, hostIndex, currentHosts
-  ));
-  return baseRate * (dist^(-modelParams.beta));
-}
-
-function getCurrentHostsPred(fromState: Int) => Function(Int) => Bool {
   if fromState == 0 {
-    return function (i: Int) => Bool {return i == 2 || i == 1;};
+    let currentHosts = whichTrue(sapply(
+      repertoire,
+      function(i: Int) => Bool { return i == 2 || i == 1; }
+    ));
+    let dist = mtxMean(mtxRowCols(
+      modelParams.hostMetric, hostIndex, currentHosts
+    ));
+    return baseRate * (dist^(-modelParams.beta));
   } else {
-    return function (i: Int) => Bool {return i == 2;};
+    let currentHosts = whichTrue(sapply(
+      repertoire,
+      function(i: Int) => Bool { return i == 2 ; }
+    ));
+    let dist = mtxMean(mtxRowCols(
+      modelParams.hostMetric, hostIndex, currentHosts
+    ));
+    return baseRate * (dist^(-modelParams.beta));
   }
 }
-
 
 // Check if the branch is valid in the sense that the parasite has at least 
 // one host after each event in the ordered event sequence
