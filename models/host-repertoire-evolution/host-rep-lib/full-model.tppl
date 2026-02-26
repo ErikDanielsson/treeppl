@@ -112,14 +112,15 @@ function getGainRate (
   let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
   // We need to add the phylogenetic influence to the rate
   // since we have a gain event
-  let currentHosts = whichTrue(sapply(repertoire, getCurrentHostsPred(fromState)));
+  let pred = getCurrentHostsPred(fromState);
+  let currentHosts = whichTrue(sapply(repertoire, pred));
   let dist = mtxMean(mtxRowCols(
     modelParams.hostMetric, hostIndex, currentHosts
   ));
-  return baseRate * dist^(-modelParams.beta);
+  return baseRate * (dist^(-modelParams.beta));
 }
 
-function getCurrentHostsPred(fromState: Int) {
+function getCurrentHostsPred(fromState: Int) => Function(Int) => Bool {
   if fromState == 0 {
     return function (i: Int) => Bool {return i == 2 || i == 1;};
   } else {

@@ -41,7 +41,7 @@ type CorrectedBranchSample = CorrectedBranchSample {
 type ModelParams = ModelParams {
   beta: Real,
   hostMetric: Matrix[Real],
-  embeddedQMatrix: EmbeddedMarkovChainMatrix,
+  embeddedQMatrix: EmbeddedMarkovChainMatrix
 }
 
 // Model parameters for CTMC in jump chain form

@@ -4,15 +4,15 @@ import "lib.tppl"
 
 function normalizeHostMetric(hostMetric: Real[][]) => Real[][] {
   // Divide the metric by the mean distance
-  let summedPairWiseDists = seqSumReal(join(hostMetric));
+  let summedPairWiseDists = seqSumReal(paste0(hostMetric));
   let n = length(hostMetric);
   let meanDist = summedPairWiseDists / Real(n * (n - 1));
-  return sapply(
+  return sapply(hostMetric,
     function(s : Real[]) => Real[] {
-      return sapply(function(e: Real) => Real {
-        return e / meanDist
-      }, s)
-    }, hostMetric
+      return sapply(s, function(e: Real) => Real {
+        return e / meanDist;
+      });
+    }
   );
 }
 

@@ -15,7 +15,7 @@ type ReturnType = ReturnType{
 model function hostRepertoireModel(
   symbiontTree: TreeLabeled,
   interactions: Int[][],
-  hostDistances: Real[][],
+  hostDistances: Real[][]
 ) => ReturnType {
 
   let nHosts = length(hostDistances);
@@ -58,7 +58,7 @@ model function hostRepertoireModel(
   let modelParams = ModelParams {
     beta = beta,
     hostMetric = nestSeqToMtx(normalizeHostMetric(hostDistances)),
-    embeddedQMatrix = embeddedQMatrix,
+    embeddedQMatrix = embeddedQMatrix
   };
   let rootAge = postorderTree.age;
   let leftRepertoireTree = sampleTreeHistory(
