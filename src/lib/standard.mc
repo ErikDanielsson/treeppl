@@ -38,6 +38,7 @@ let mathExp = exp
 let mathLog = log
 let mathSqrt = sqrt
 let mathModi = modi
+let mathIsNaN = isNaN
 
 let mathMini = mini
 let mathMaxi = maxi

@@ -28,9 +28,13 @@ function sqrt(x : Real) => Real {
   return mathSqrt(x);
 }
 
-/* -------------------
+function isNaN(r : Real) => Bool {
+  return mathIsNaN(r);
+}
+
+/* ------------------------------------
    Finding maximum and minimum of pairs
-   ------------------- */
+   ------------------------------------ */
 
 function minInt(a : Int, b : Int) => Int {
   return mathMini(a)(b);
@@ -132,6 +136,10 @@ function whichTrue(s : Bool[]) => Int[] {
     }
     return acc;
   }, [], s);
+}
+
+function seqKroneckerDelta(index : Int, length : Int) => Real[] {
+  return repApply(length, function(i : Int) => Real { return bool2real(index == i); });
 }
 
 

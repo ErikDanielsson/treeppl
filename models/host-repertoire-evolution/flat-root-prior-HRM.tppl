@@ -59,7 +59,7 @@ model function hostRepertoireModel(
   logWeight (rootLogModelDensity - rootLogSamplingDensity) * exp(Real(postorderTree.label) * 0.);
 
   // Compute messages to pass to pass to the children of the root
-  let newMsg = mtxCreate(nHosts, 3, observationMessage(rootRep, 1, nHosts));
+  let newMsg = observationMessage(rootRep);
   let leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
   let rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
 
@@ -158,7 +158,7 @@ function sampleTreeHistory(
     logWeight branchSample.logModelDensity - branchSample.logSamplingDensity - nodeLogSamplingDensity * exp(Real(tree.label) * 0.);
 
     // Since we sampled a repertoire at the node we should propagate this information to the child nodes
-    let newMsg = mtxCreate(nHosts, 3, observationMessage(rep, 1, nHosts));
+    let newMsg = observationMessage(rep);
     let leftMsg = mtxMul(newMsg, tree.leftKernel);
     let rightMsg = mtxMul(newMsg, tree.rightKernel);
 
