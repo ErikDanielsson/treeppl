@@ -131,7 +131,7 @@ model function hostRepertoireModel(
   let historyTree = HistoryNode {
     age = symbiontTree.age, label = symbiontTree.label,
     left = leftRepertoireTree, right = rightRepertoireTree,
-    repertoire = rootRep, history = []
+    repertoire = rootRep, history = subrootBranchSample.history
   };
 
   return ReturnType {
