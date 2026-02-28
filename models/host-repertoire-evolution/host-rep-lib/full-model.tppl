@@ -1,5 +1,3 @@
-import "stdlib::math.mc"
-import "helpers.tppl"
 import "container-types.tppl"
 /*
  * This file contains functions for calculating the point wise density for the
