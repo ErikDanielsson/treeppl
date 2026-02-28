@@ -20,7 +20,6 @@ type MsgTree =
     outMsg: Matrix[Real]
   }
 
-
 // The final tree with node repertoires and branch histories
 type HistoryTree =
   | HistoryLeaf {age: Real, label: Int, repertoire: Int[], history: Event[]}

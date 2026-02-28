@@ -1,23 +1,22 @@
-import "stdlib::ext/dist-ext.mc"
 import "helpers.tppl"
 
 /*
  * Node repertoire sampling density
  */ 
-function mtx3ToSeq(mtx: Matrix[Real], i: Int ) => Real[] {
-  let row = sapply(function(j: Int) => Real { return mtxGet(i, j, mtx)}, 1 to 3);
-  let s = seqSumReal(row);
-  // NOTE(ed, 28-02-2026): We really want partial application of operators for situations like this...
-  return sapply(function (e: Real) { return e / s}, row);
-}
-
 function getRepertoireSamplingDensity(x: Int[], samplingProb: Matrix[Real]) => Real {
   // Accumulate the total log probability of sampling this repertoire
   return seqSumReal(sapply(
     x, function(h: Int) => Real {
       return categoricalLogScore(
-        h, CategoricalParam { probs = mtx3ToSeq(samplingProb, i) }
+        h, CategoricalParam { probs = hostMsgToProb(samplingProb, i) }
       );
     }
   ));
+}
+
+function hostMsgToProb(mtx: Matrix[Real], i: Int ) => Real[] {
+  let row = sapply(function(j: Int) => Real { return mtxGet(i, j, mtx)}, 1 to 3);
+  let s = seqSumReal(row);
+  // NOTE(ed, 28-02-2026): We really want partial application of operators for situations like this...
+  return sapply(function (e: Real) { return e / s}, row);
 }

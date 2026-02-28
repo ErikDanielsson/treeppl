@@ -4,8 +4,8 @@ import "host-rep-lib/helpers.tppl"
 import "host-rep-lib/belief-propagation.tppl"
 import "host-rep-lib/dist-helpers.tppl"
 import "host-rep-lib/full-model.tppl"
-import "host-rep-lib/rb-drift-kernels.tppl"
 import "host-rep-lib/independence-model.tppl"
+import "host-rep-lib/drift-kernels.tppl"
 
 type ReturnType = ReturnType{
   lambda: Real[], mu: Real, beta: Real, tree: HistoryTree
@@ -95,7 +95,7 @@ function suggestNodeRep(
     function(h : Int) => Int {
       // We need the nodeLabel in the inference layer to connect the assumes to the 
       // correct node
-      let param = mtx3ToSeq(msg, h + nodeLabel * 0);
+      let param = hostMsgToProb(msg, h + nodeLabel * 0);
       assume x ~ Categorical(param) drift categoricalMove(x, param); 
       return x;
     }
