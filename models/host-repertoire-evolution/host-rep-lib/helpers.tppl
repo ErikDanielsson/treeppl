@@ -1,6 +1,4 @@
 import "container-types.tppl"
-import "lib.tppl"
-
 
 function normalizeHostMetric(hostMetric: Real[][]) => Real[][] {
   // Divide the metric by the mean distance

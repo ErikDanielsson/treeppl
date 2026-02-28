@@ -8,15 +8,15 @@ function getRepertoireSamplingDensity(x: Int[], samplingProb: Matrix[Real]) => R
   return seqSumReal(sapply(
     x, function(h: Int) => Real {
       return categoricalLogScore(
-        h, CategoricalParam { probs = hostMsgToProb(samplingProb, i) }
+        h, CategoricalParam { probs = hostMsgToProb(samplingProb, h) }
       );
     }
   ));
 }
 
 function hostMsgToProb(mtx: Matrix[Real], i: Int ) => Real[] {
-  let row = sapply(function(j: Int) => Real { return mtxGet(i, j, mtx)}, 1 to 3);
+  let row = sapply(1 to 3, function(j: Int) => Real { return mtxGet(i, j, mtx); });
   let s = seqSumReal(row);
   // NOTE(ed, 28-02-2026): We really want partial application of operators for situations like this...
-  return sapply(function (e: Real) { return e / s}, row);
+  return sapply(row, function (e: Real) => Real { return e / s; });
 }

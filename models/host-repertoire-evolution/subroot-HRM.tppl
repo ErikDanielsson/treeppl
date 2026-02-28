@@ -1,4 +1,3 @@
-import "host-rep-lib/lib.tppl"
 import "host-rep-lib/container-types.tppl"
 import "host-rep-lib/helpers.tppl"
 import "host-rep-lib/belief-propagation.tppl"
@@ -12,17 +11,18 @@ type ReturnType = ReturnType{
 }
 
 type SubrootInfo = SubrootInfo {
+  rep: Int[],
   msg: Matrix[Real],
-  kernel: Matrix[Real],
+  kernel: Matrix[Real]
 }
 
 function subrootNode(
   rootMsg: Matrix[Real],
   subrootLength: Real,
   subrootLabel: Int,
-  qMatrix: Matrix[Real]
+  qMatrix: Matrix[Real],
   nHosts: Int
-) => Matrix[Real] {
+) => SubrootInfo {
   // Calculate kernels for the subroot branch 
   let subrootKernel = mtxExp(mtxSclrMul(subrootLength, qMatrix));
   let subrootBackwardsKernel = mtxTrans(subrootKernel);
@@ -33,19 +33,17 @@ function subrootNode(
   let subrootSamplingProb = mtxElemMul(subRootSamplingProb, subrootNodePrior);
 
   // Sample the subroot
-  // We do not have any label to assign to the subroot
-  // so we will use -1 in the inference layer
   let subrootRep = suggestNodeRep(subrootSamplingProb, nHosts, -1);
-  weight bool2real(any(is2, subrootRep));
+  weight bool2real(any(is2, subrootRep)) + Real(subrootLabel) * 0.;
 
   // Calculate the debt and excess
-  let subrootSamplingDensity = getRepertoireSamplingDensity(subrootRep, subrootSamplingProb, nHosts);
+  let subrootSamplingDensity = getRepertoireSamplingDensity(subrootRep, subrootSamplingProb);
   let subrootModelDensity = -log((3.^(Real(nHosts))) - (2.^Real(nHosts)));
 
-  logWeight subrootModelDensity - subrootSamplingDensity;
+  logWeight subrootModelDensity - subrootSamplingDensity + Real(subrootLabel) * 0.;
 
   let subrootMsg = observationMessage(subrootRep);
-  return SubrootInfo { msg = mtxMul(subrootMsg, subrootKernel), kernel = subrootKernel };
+  return SubrootInfo { rep = subrootRep, msg = mtxMul(subrootMsg, subrootKernel), kernel = subrootKernel };
 }
 
 
@@ -83,7 +81,7 @@ model function hostRepertoireModel(
   let postorderTree = postorderTraverse(symbiontTree, qMatrix, interactions, nHosts);
 
   // Sample the subroot 
-  let subrootInfo = subrootNode(postorderTree.outMsg, subrootLength, subrootLabel, qMatrix, nHosts)
+  let subrootInfo = subrootNode(postorderTree.outMsg, subrootLength, subrootLabel, qMatrix, nHosts);
   // Sample the root
   let rootSamplingProb = mtxElemMul(subrootInfo.msg, postorderTree.outMsg);
   let rootRep = suggestNodeRep(rootSamplingProb, nHosts, postorderTree.label);
@@ -92,7 +90,7 @@ model function hostRepertoireModel(
   // Sample the subroot branch
   let rootAge = postorderTree.age;
   let subrootBranchSample = sampleBranch(
-    subrootRep,
+    subrootInfo.rep,
     rootRep,
     rootAge + subrootLength, 
     rootAge,
@@ -103,7 +101,7 @@ model function hostRepertoireModel(
   );
 
   // Calculate the samplingDensity and modelDensity
-  let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb, nHosts);
+  let rootLogSamplingDensity = getRepertoireSamplingDensity(rootRep, rootSamplingProb);
 
   // Weight the program by the importance ratio
   logWeight (
@@ -195,7 +193,7 @@ function sampleTreeHistory(
     let rep = suggestNodeRep(samplingProb, nHosts, tree.label);
     // Verify that the sampled repertoire is valid
     weight bool2real(any(is2, rep)) + Real(tree.label) * 0.;
-    let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb, nHosts);
+    let nodeLogSamplingDensity = getRepertoireSamplingDensity(rep, samplingProb);
 
     // Sample the incident branch
     let branchSample = sampleBranch(

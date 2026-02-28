@@ -138,7 +138,7 @@ function whichTrue(s : Bool[]) => Int[] {
   }, [], s);
 }
 
-function seqKroneckerDelta(index : Int, length : Int) => Real[] {
+function kroneckerDelta(index : Int, length : Int) => Real[] {
   return repApply(length, function(i : Int) => Real { return bool2real(index == i); });
 }
 

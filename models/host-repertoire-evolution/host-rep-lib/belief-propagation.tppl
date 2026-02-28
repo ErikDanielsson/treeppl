@@ -1,17 +1,16 @@
 import "container-types.tppl"
-import "lib.tppl"
 
 // Compute postorder messages on the observed tree
 function postorderTraverse(
   tree: TreeLabeled, qMatrix: Matrix[Real], interactions: Int[][], nhosts: Int
 ) => MsgTree {
   if tree is Leaf {
-    let outmsg = observationMessage(interactions[tree.label], 1, nhosts);
+    let outmsg = observationMessage(interactions[tree.label]);
     let leafInts = interactions[tree.label];
     return MsgLeaf{
       age = 0.0,
       label = tree.label,
-      outMsg = observationMessage(leafInts, 1, nhosts),
+      outMsg = observationMessage(leafInts),
       interactions = leafInts
     };
   }
