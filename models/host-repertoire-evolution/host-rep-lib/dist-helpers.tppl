@@ -4,7 +4,7 @@
 
 function categoricalLogPmf(x: Int, param: Real[]) => Real {
   if (0 <= x) && (x < length(param)) {
-    return log(param[x]);
+    return log(param[x + 1]);
   } else {
     return log(0.);
   }
