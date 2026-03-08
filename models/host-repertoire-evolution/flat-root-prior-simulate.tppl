@@ -1,0 +1,278 @@
+// Input tree with labels 
+type TreeLabeled =
+  | Leaf{age: Real, label: Int}
+  | Node{age: Real, left: TreeLabeled, right: TreeLabeled, label: Int}
+
+// Model parameters as given
+type ModelParams = ModelParams {
+  beta: Real,
+  hostMetric: Matrix[Real],
+  embeddedQMatrix: EmbeddedMarkovChainMatrix
+}
+
+// Model parameters for CTMC in jump chain form
+type EmbeddedMarkovChainMatrix = EmbeddedMarkovChainMatrix {
+  totalRates: Real[],
+  transitionProbs: Real[][],
+  mat: Matrix[Real]
+}
+
+// Output interactions
+type Interaction = Interaction {
+  label: Int, interactions: Int[]
+}
+
+function sampleUniformRepertoire(nHosts: Int) => Int[] {
+  let params = seqNormalize([1., 1., 1.]);
+  let rep = sapply(1 to nHosts, function(i: Int) => Int {assume x ~ Categorical(params); return x; });
+  if count2s(rep) > 0 {
+    return rep;
+  } else {
+    return sampleUniformRepertoire(nHosts);
+  }
+}
+
+model function hostRepertoireForwardModel(
+  mu: Real,
+  beta: Real,
+  lambda: Real[],
+  symbiontTree: TreeLabeled,
+  hostDistances: Real[][],
+  subrootLength: Real, 
+  subrootLabel: Int
+) => Interaction[] {
+
+  let nHosts = length(hostDistances);
+
+  let lambda = seqNormalize(lambda);
+
+  let r = mtxCreate(3,3,
+    [0.-lambda[1],                lambda[1],          0.0,
+        lambda[2], 0.-(lambda[2]+lambda[3]),    lambda[3],
+              0.0,                lambda[4], 0.-lambda[4]]
+  );
+  let qMatrix = mtxSclrMul(mu, r);
+  
+  // Construct an object containing the rate matrix in a suitable format for sampling 
+  // from the embedded Markov chain
+  let embeddedQMatrix = rateMatrixToEmbeddedMarkovChain(qMatrix);
+  let modelParams = ModelParams {
+    beta = beta,
+    hostMetric = nestSeqToMtx(normalizeHostMetric(hostDistances)),
+    embeddedQMatrix = embeddedQMatrix
+  };
+
+  // Sample the root
+  let rootRep = sampleUniformRepertoire(nHosts);
+  let rootAge = symbiontTree.age;
+  
+  let leftInteractions = sampleTreeHistory(
+    symbiontTree.left, rootRep, rootAge, modelParams
+  );
+
+  let rightInteractions = sampleTreeHistory(
+    symbiontTree.right, rootRep, rootAge, modelParams
+  );
+
+  return concat(leftInteractions, rightInteractions);
+} 
+
+function sampleTreeHistory(
+  tree: TreeLabeled,
+  parentRep: Int[],
+  parentAge: Real,
+  modelParams: ModelParams
+) => Interaction[] {
+  if tree is Leaf {
+    // Sample the incident branch
+    let leafRep = sampleBranch(
+      parentRep,
+      parentAge,
+      tree.age,
+      modelParams
+    );
+    return [Interaction { label = tree.label, interactions = leafRep }];
+  } else {
+    // Sample the incident branch
+    let nodeRep = sampleBranch(
+      parentRep,
+      parentAge,
+      tree.age,
+      modelParams
+    );
+    let leftInteractions = sampleTreeHistory(
+      tree.left, nodeRep, tree.age, modelParams
+    );
+    let rightInteractions = sampleTreeHistory(
+      tree.right, nodeRep, tree.age, modelParams
+    );
+    return concat(leftInteractions, rightInteractions);
+  }
+}
+
+type RepertoireChange = RepertoireChange {
+  hostIndex: Int, newState: Int, rate: Real
+}
+
+/*
+ * Here we simulate the Markov process occuring on each branch
+ */ 
+function sampleBranch(
+  currRep: Int[], currAge: Real, finalAge: Real, modelParams: ModelParams
+) => Int[] {
+  let events = getEvents(currRep, modelParams);
+  let rates = sapply(events, function(event: RepertoireChange) => Real { return event.rate; });
+  let totalRate = seqSumReal(rates);
+  assume t ~ Exponential(totalRate);
+  let nextAge = currAge - t;
+  if nextAge > finalAge {
+    let eventProbs = seqNormalize(rates);
+    assume eventIndex ~ Categorical(eventProbs);
+    let changeEvent = events[eventIndex];
+    let newRep = updateRepertoire(currRep, changeEvent);
+    return sampleBranch(newRep, nextAge, finalAge, modelParams);
+  } else {
+    return currRep;
+  }
+}
+
+function getEvents(
+  currRep: Int[], modelParams: ModelParams
+) => RepertoireChange[] {
+  // Compute the total rate of leaving the current repertoire
+  let gainEvents = fold(
+    function(acc: RepertoireChange[], i: Int) => RepertoireChange[] {
+      let fromState = currRep[i];
+      if fromState == 2 {
+        // No gain events from 2
+        return acc;
+      } else {
+        let rate = getGainRate(currRep, i, modelParams);
+        let event = RepertoireChange { hostIndex = i, newState = fromState + 1, rate = rate };
+        return cons(event, acc);
+      }
+    },
+    [],
+    1 to (length(currRep))
+  );
+
+  let lossEvents = fold(
+    function(acc: RepertoireChange[], i: Int) => RepertoireChange[] {
+      let fromState = currRep[i];
+      if fromState == 0 {
+        return acc;
+      } else {
+        let rate = getLossRate(currRep, i, modelParams);
+        let event = RepertoireChange { hostIndex = i, newState = fromState - 1, rate = rate };
+        return cons(event, acc);
+      }
+    }, 
+    [],
+    1 to (length(currRep))
+  );
+  return concat(gainEvents, lossEvents);
+}
+
+function getLossRate(
+  repertoire: Int[], hostIndex: Int, modelParams: ModelParams
+) => Real {
+  // Check if we are losing a two and if this results in a legal repertoire
+  let fromState = repertoire[hostIndex];
+  if fromState == 2 && count2s(repertoire) == 1 {
+    return 0.0;
+  } else {
+    let toState = fromState - 1;
+    let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
+    return baseRate;
+  }
+}
+
+function getGainRate (
+  repertoire: Int[],
+  hostIndex: Int,
+  modelParams: ModelParams
+) => Real {
+  let fromState = repertoire[hostIndex];
+  let toState = fromState + 1;
+  let baseRate = mtxGet(fromState + 1, toState + 1, modelParams.embeddedQMatrix.mat);
+  // We need to add the phylogenetic influence to the rate
+  // since we have a gain event
+  if fromState == 0 {
+    let currentHosts = whichTrue(sapply(
+      repertoire,
+      function(i: Int) => Bool { return i == 2 || i == 1; }
+    ));
+    let dist = mtxMean(mtxRowCols(
+      modelParams.hostMetric, hostIndex, currentHosts
+    ));
+    return baseRate * (dist^(-modelParams.beta));
+  } else {
+    let currentHosts = whichTrue(sapply(
+      repertoire,
+      function(i: Int) => Bool { return i == 2 ; }
+    ));
+    let dist = mtxMean(mtxRowCols(
+      modelParams.hostMetric, hostIndex, currentHosts
+    ));
+    return baseRate * (dist^(-modelParams.beta));
+  }
+}
+
+function updateRepertoire(currRep: Int[], event: RepertoireChange) => Int[] {
+  let hostIndex = event.hostIndex;
+  let nHosts = length(currRep);
+  return paste0(
+    [
+      slice(currRep, 1, hostIndex),
+      [event.newState],
+      slice(currRep, hostIndex + 1, nHosts + 1)
+    ]
+  );
+}
+
+function count2s(repertoire: Int[]) => Int {
+  return fold(function (acc: Int, h: Int) => Int {
+      if h == 2 { return acc + 1; } else { return acc; }
+    }, 0, repertoire);
+}
+
+function rateMatrixToEmbeddedMarkovChain(
+  qMatrix: Matrix[Real]
+) => EmbeddedMarkovChainMatrix {
+  // Construct a sequence representations of the qMatrix which we can later
+  // use for sampling from the embedded Markov Chain
+  let q1 = -mtxGet(1, 1, qMatrix);
+  let q2 = -mtxGet(2, 2, qMatrix);
+  let q3 = -mtxGet(3, 3, qMatrix);
+  return EmbeddedMarkovChainMatrix {
+    totalRates = [q1, q2, q3],
+    transitionProbs = [
+      [0.0, 1.0, 0.0],
+      [mtxGet(2, 1, qMatrix) / q2, 0.0, mtxGet(2, 3, qMatrix) / q2],
+      [0.0, 1.0, 0.0]
+    ],
+    mat = qMatrix
+  };
+}
+
+function normalizeHostMetric(hostMetric: Real[][]) => Real[][] {
+  // Divide the metric by the mean distance
+  let summedPairWiseDists = seqSumReal(paste0(hostMetric));
+  let n = length(hostMetric);
+  let meanDist = summedPairWiseDists / Real(n * (n - 1));
+  return sapply(hostMetric,
+    function(s : Real[]) => Real[] {
+      return sapply(s, function(e: Real) => Real {
+        return e / meanDist;
+      });
+    }
+  );
+}
+
+// NOTE(ErikDanielsson, 22-01-2026): Constructs a matrix from a nested list.
+// Does not verify non-jaggedness and requires the outer list to be nonempty
+function nestSeqToMtx(ns : Real[][]) => Matrix[Real] {
+  let n = length(ns); 
+  let m = length(ns[1]);
+  return mtxCreate(n, m, paste0(ns));
+}
