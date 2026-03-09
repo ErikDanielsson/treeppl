@@ -39,7 +39,7 @@ model function hostRepertoireForwardModel(
   symbiontTree: TreeLabeled,
   hostDistances: Real[][],
   subrootLength: Real, 
-  subrootLabel: Int
+  initialRep: Int[]
 ) => Interaction[] {
 
   let nHosts = length(hostDistances);
@@ -62,10 +62,9 @@ model function hostRepertoireForwardModel(
     embeddedQMatrix = embeddedQMatrix
   };
 
-  // Sample the subroot
-  let subrootRep = sampleUniformRepertoire(nHosts);
+  // Sample the root
   let rootAge = symbiontTree.age;
-  let rootRep = sampleBranch(subrootRep, rootAge + subrootLength, rootAge, modelParams);
+  let rootRep = sampleBranch(initialRep, rootAge + subrootLength, rootAge, modelParams);
   
   let leftInteractions = sampleTreeHistory(
     symbiontTree.left, rootRep, rootAge, modelParams
@@ -129,7 +128,7 @@ function sampleBranch(
   if nextAge > finalAge {
     let eventProbs = seqNormalize(rates);
     assume eventIndex ~ Categorical(eventProbs);
-    let changeEvent = events[eventIndex];
+    let changeEvent = events[eventIndex + 1];
     let newRep = updateRepertoire(currRep, changeEvent);
     return sampleBranch(newRep, nextAge, finalAge, modelParams);
   } else {
