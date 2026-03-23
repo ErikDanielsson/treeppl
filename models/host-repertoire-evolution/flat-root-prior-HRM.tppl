@@ -230,7 +230,7 @@ function sampleBranch(
     // MCMC-INFERENCE: Do rejection sampling if we reach this point
     return CorrectedBranchSample {
       history = orderedEvents,
-      logSamplingDensity = log(0.0),
+      logSamplingDensity = 0.,
       logModelDensity = log(0.0),
       success = false
     };

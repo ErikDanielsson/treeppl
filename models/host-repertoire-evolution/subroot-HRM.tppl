@@ -24,7 +24,7 @@ function subrootNode(
   nHosts: Int
 ) => SubrootInfo {
   // Calculate kernels for the subroot branch 
-  let subrootKernel = mtxExp(mtxSclrMul(subrootLength, qMatrix));
+  let subrootKernel = mtxExpRateSafe(mtxSclrMul(subrootLength, qMatrix));
   let subrootBackwardsKernel = mtxTrans(subrootKernel);
   let subRootSamplingProb = mtxMul(rootMsg, subrootBackwardsKernel);
 
@@ -33,7 +33,7 @@ function subrootNode(
   let subrootSamplingProb = mtxElemMul(subRootSamplingProb, subrootNodePrior);
 
   // Sample the subroot
-  let subrootRep = suggestNodeRep(subrootSamplingProb, nHosts, -1);
+  let subrootRep = suggestNodeRep(subrootSamplingProb, nHosts, subrootLabel);
   weight bool2real(any(is2, subrootRep)) + Real(subrootLabel) * 0.;
 
   // Calculate the debt and excess
@@ -56,7 +56,6 @@ model function hostRepertoireModel(
 ) => ReturnType {
 
   let nHosts = length(hostDistances);
-
   assume lambda ~ Dirichlet([1., 1., 1., 1.]) drift rbLambdaMove(lambda);
   assume mu ~ Exponential(10.) drift rbMuMove(mu);
   assume beta ~ Exponential(1.) drift rbBetaMove(beta);
@@ -95,7 +94,7 @@ model function hostRepertoireModel(
     rootAge + subrootLength, 
     rootAge,
     nHosts,
-    -1, // This is the subroot label
+    postorderTree.label,
     modelParams,
     subrootInfo.kernel
   );
@@ -114,7 +113,6 @@ model function hostRepertoireModel(
   let newMsg = observationMessage(rootRep);
   let leftMsg = mtxMul(newMsg, postorderTree.leftKernel);
   let rightMsg = mtxMul(newMsg, postorderTree.rightKernel);
-
 
   let rootAge = postorderTree.age;
   let leftRepertoireTree = sampleTreeHistory(
@@ -284,7 +282,7 @@ function sampleBranch(
     // MCMC-INFERENCE: Do rejection sampling if we reach this point
     return CorrectedBranchSample {
       history = orderedEvents,
-      logSamplingDensity = log(0.0),
+      logSamplingDensity = 0.0,
       logModelDensity = log(0.0),
       success = false
     };
