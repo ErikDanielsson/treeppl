@@ -9,7 +9,7 @@ print_model () {
     if [ -f $target ]; then
         echo "Target $target exists, skipping"
     else
-        echo "Target $target does not exists, skipping"
+        echo "Target $target does not exists, compiling"
         build/tpplc-graph $model --output build/temp --print-model > $target
     fi
 }

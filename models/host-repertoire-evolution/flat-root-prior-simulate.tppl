@@ -208,7 +208,7 @@ function getGainRate (
   } else {
     let currentHosts = whichTrue(sapply(
       repertoire,
-      function(i: Int) => Bool { return i == 2 ; }
+      function(i: Int) => Bool { return i == 2; }
     ));
     let dist = mtxMean(mtxRowCols(
       modelParams.hostMetric, hostIndex, currentHosts
