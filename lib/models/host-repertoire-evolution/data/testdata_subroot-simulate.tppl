@@ -1,0 +1,91 @@
+{
+  "symbiontTree": {
+    "__constructor__": "Node",
+    "__data__": {
+      "label": 11,
+      "age": 10.0,
+      "left": {
+        "__constructor__": "Node",
+        "__data__": {
+          "label": 9,
+          "age": 3.360348,
+          "left": {
+            "__constructor__": "Node",
+            "__data__": {
+              "label": 7,
+              "age": 1.279190,
+              "left": {
+                "__constructor__": "Leaf",
+                "__data__": {
+                  "label": 1,
+                  "age": 0.0
+                }
+              },
+              "right": {
+                "__constructor__":"Leaf",
+                "__data__": {
+                  "label":2,
+                  "age":0.0
+                }
+              }
+            }
+          },
+          "right": {
+            "__constructor__": "Node",
+            "__data__": {
+              "label": 8,
+              "age": 0.153814,
+              "left": {
+                "__constructor__": "Leaf",
+                "__data__": {    
+                  "label": 3,
+                  "age": 0.0
+                }  
+              },
+              "right": {
+                "__constructor__": "Leaf",
+                "__data__": {
+                  "label": 4,
+                  "age": 0.0
+                }
+              }
+            }
+          }
+        }
+      },
+      "right": {
+        "__constructor__": "Node",
+        "__data__": {
+          "label": 10,
+          "age": 1.079144,
+          "left": {
+            "__constructor__": "Leaf",
+            "__data__": {
+              "label": 5,
+              "age": 0.0
+            }
+          },
+          "right": {
+            "__constructor__": "Leaf",
+            "__data__": {
+              "label": 6,
+              "age": 0.0
+            }
+          }  
+        }
+      }   
+    }
+  },
+  "subrootLength": 10.0,
+  "mu": 1.0,
+  "beta": 1.0,
+  "lambda": [1.0, 1.0, 1.0, 1.0], 
+  "initialRep": [0, 1, 2, 1, 0],
+  "hostDistances": [
+    [0.0, 0.8630075756, 2.6699063134, 2.6699063134, 2.6699063134],
+    [0.8630075756,0.0,2.6699063134,2.6699063134, 2.6699063134],
+    [2.6699063134,2.6699063134,0.0,1.2256551506,1.9598979474],
+    [2.6699063134,2.6699063134,1.2256551506,0.0,1.9598979474],
+    [2.6699063134,2.6699063134,1.9598979474,1.9598979474,0.0]
+  ]
+}
