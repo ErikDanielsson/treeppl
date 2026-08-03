@@ -84,8 +84,8 @@ function hostIndepLikelihood(
     let nextAge = nextEvent.eventTime;
     let timePassed = currAge - nextAge;
     let outRate = embeddedQMatrix.totalRates[currState + 1];
-    let transProb = embeddedQMatrix.transitionProbs[currState + 1][nextState + 1];
-    return log(transProb) - timePassed * outRate + hostIndepLikelihood(
+    let thisRate = mtxGet(currState + 1, nextState + 1, embeddedQMatrix.mat);
+    return log(thisRate) - timePassed * outRate + hostIndepLikelihood(
       nextIndex + 1,
       nextState,
       finalState,

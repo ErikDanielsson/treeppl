@@ -28,7 +28,7 @@ function fullModelWeight(
     let thisRate = getRate(currRep, nextEvent, modelParams);
     let timePassed = currAge - newAge;
     // Compute the log density at this event
-    let thisWeight = log(thisRate / totalLeavingRate) - timePassed * totalLeavingRate;
+    let thisWeight = log(thisRate) - timePassed * totalLeavingRate;
     // Compute the next repertoire 
     let newRep = updateRepertoire(currRep, nextEvent, nhosts);
     return thisWeight + fullModelWeight(
