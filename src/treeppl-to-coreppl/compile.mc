@@ -1130,7 +1130,7 @@ lang TreePPLThings = TreePPLAst + TreePPLCompile
     match parseTreePPLExn path content with DeclSequenceFileTppl top in
 
     -- Standard library (these should be in scope in the program)
-    let autoImportDir = stdlibResolveFileOr (lam. never) "." "treeppl::auto-import" in
+    let autoImportDir = stdlibResolveFileOr (lam err. error err) "." "treeppl::auto-import" in
     let autoImportPaths =
       -- NOTE(vipa, 2026-05-20): Do not autoimport anything if we're
       -- currently compiling a file in the auto-import dir
