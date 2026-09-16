@@ -513,10 +513,11 @@ let graphMcmcOptions : OptParser MkInferMethod =
   optMap2 (lam. lam x. x) method res in
 
 let tpplFrontendOptions : OptParser TpplFrontendOptions =
-  let mk = lam input. lam output. lam outputMl. lam inferTimeMs. lam seed. lam sweeps.
+  let mk = lam input. lam output. lam outputMl. lam printMCore. lam inferTimeMs. lam seed. lam sweeps.
     { input = input
     , output = output
     , outputMl = outputMl
+    , printMCore = printMCore
     , inferTimeMs = inferTimeMs
     , seed = seed
     , sweeps = sweeps
@@ -540,7 +541,12 @@ let tpplFrontendOptions : OptParser TpplFrontendOptions =
     , description = "Output the intermediate .ml file to this path."
     , category = catDebug
     }) in
-  optApply (optMap5 mk input output outputMl inferTimeMs seed) sweeps in
+  let printMCore = optOptional (optArg
+    { optArgDefString with long = "print-mc"
+    , description = "Print the final MCore program: \"deadcode\" after deadcode eliminiation and \"lowering\" after lowering pass"
+    , category = catDebug
+    }) in
+  optApply (optApply (optMap5 mk input output outputMl printMCore inferTimeMs) seed) sweeps in
 
 let transformationOptions : OptParser TransformationOptions =
   let mk = lam printModel. lam extractSimplification. lam staticDelay. lam debugPhases. lam debugDumpPhases.
@@ -567,6 +573,7 @@ let transformationOptions : OptParser TransformationOptions =
     , description = "The parsed model is pretty printed before inference method transformations."
     , category = catDebug
     } in
+
   let extractSimplification =
     let default = "none" in
     let opt = optArg

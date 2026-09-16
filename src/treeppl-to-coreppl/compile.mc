@@ -1081,6 +1081,7 @@ type TpplFrontendOptions =
   { input : String
   , output : String
   , outputMl : Option String
+  , printMCore : Option String 
   , inferTimeMs : Bool
   , seed : Option Int
   , sweeps : Int
@@ -1268,7 +1269,17 @@ let compileTpplToExecutable = lam frontend. lam transformations. lam mkInference
   let hooks = mkEmptyHooks ocamlCompile in
   let ast = deadcodeElimination ast in
   endPhaseStatsExpr log "deadcode-elimination" ast;
+  (match frontend.printMCore with Some a then
+    if eqString a "deadcode" then
+      printLn (expr2str ast)
+    else ()
+   else ());
   let ast = lowerAll ast in
+  (match frontend.printMCore with Some a then
+    if eqString a "lowering" then
+      printLn (expr2str ast)
+    else ()
+   else ());
   endPhaseStatsExpr log "lower-all" ast;
   let ast = constantFold ast in
   endPhaseStatsExpr log "constant-folding" ast;
