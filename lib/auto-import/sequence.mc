@@ -1,3 +1,5 @@
+include "bool.mc"
+include "common.mc"
 include "seq.mc"
 
 let seqSnoc = snoc
@@ -12,3 +14,4 @@ let seqSubsequence = subsequence
 let seqFoldl = foldl
 let seqFoldli = foldli
 let seqAny = any
+let seqAll = lam p. lam s. not (any (compose not p) s)
