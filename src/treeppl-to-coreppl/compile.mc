@@ -675,8 +675,8 @@ lang TreePPLCompile
   | UniformExprTppl d ->
     TmDist {
       dist = DUniform {
-        a = compileExprTppl context d.a,
-        b = compileExprTppl context d.b
+        alpha = compileExprTppl context d.alpha,
+        beta = compileExprTppl context d.beta
       },
       ty = tyunknown_,
       info = d.info
