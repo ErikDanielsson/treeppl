@@ -666,7 +666,7 @@ lang TreePPLCompile
   | PoissonExprTppl d ->
     TmDist {
       dist = DPoisson {
-        lambda = compileExprTppl context d.rate
+        lambda = compileExprTppl context d.lambda
       },
       ty = tyunknown_,
       info = d.info
