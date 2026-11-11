@@ -618,7 +618,7 @@ lang TreePPLCompile
   | ExponentialExprTppl d ->
     TmDist {
       dist = DExponential {
-        rate = compileExprTppl context d.rate
+        beta = compileExprTppl context d.beta
       },
       ty = tyunknown_,
       info = d.info
